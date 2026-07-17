@@ -6,5 +6,5 @@ pages_build_output_dir = ".next"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "export-manager-db"
-database_id = "your-d1-database-id-goes-here"
+database_name = "export-manager-erp"
+database_id = "1e69a13a-8722-448d-92d9-55def2014960"
