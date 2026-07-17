@@ -14,8 +14,11 @@ import {
   Menu,
   X
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import ThemeToggle from "./ThemeToggle"
+import { getCurrentUser, logoutUserAction } from "@/app/actions/auth"
+import { LogOut } from "lucide-react"
 
 const menuItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -30,7 +33,26 @@ const menuItems = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null)
+
+  useEffect(() => {
+    getCurrentUser().then((u) => {
+      if (u) setUser(u)
+    })
+  }, [pathname])
+
+  const handleLogout = async () => {
+    const res = await logoutUserAction()
+    if (res.success) {
+      router.push("/login")
+      router.refresh()
+    }
+  }
+
+  // Don't show sidebar navigation on the login page
+  if (pathname === "/login") return null
 
   return (
     <>
@@ -103,13 +125,36 @@ export default function Sidebar() {
             </nav>
           </div>
 
-          {/* Footer Theme Toggle */}
-          <div className="hidden items-center justify-between border-t p-4 lg:flex bg-muted/40">
-            <span className="text-xs text-muted-foreground">© 2026 ERP Inc.</span>
-            <ThemeToggle />
+          {/* Footer with User info & logout */}
+          <div className="flex flex-col border-t bg-muted/20">
+            {user && (
+              <div className="px-4 pt-4 pb-2 border-b flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{user.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between p-4 bg-muted/40">
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <span className="text-[10px] text-muted-foreground">Theme</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut className="h-4 w-4" /> Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </aside>
     </>
   )
 }
+

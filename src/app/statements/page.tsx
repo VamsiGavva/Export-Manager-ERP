@@ -1,4 +1,4 @@
-import { getAgents, getStatements } from "@/app/actions/erp"
+import { getAgents, getLedgerHistory } from "@/app/actions/erp"
 import StatementsView from "@/components/views/StatementsView"
 
 interface StatementsPageProps {
@@ -19,7 +19,7 @@ export default async function StatementsPage({ searchParams }: StatementsPagePro
     if (!selectedAgentId) {
       selectedAgentId = agentsRes.data[0].id
     }
-    const statementsRes = await getStatements(selectedAgentId)
+    const statementsRes = await getLedgerHistory(selectedAgentId)
     if (statementsRes.success && statementsRes.data) {
       initialStatements = statementsRes.data
     }

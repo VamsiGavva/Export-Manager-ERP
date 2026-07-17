@@ -182,11 +182,11 @@ export default function DashboardView({ initialData }: DashboardViewProps) {
       return
     }
 
-    const res = await recordSale(
-      selectedShipmentId,
-      Number(saleForm.sellingPrice),
-      Number(saleForm.bagsSold)
-    )
+    const res = await recordSale({
+      shipmentId: selectedShipmentId,
+      sellingPrice: Number(saleForm.sellingPrice),
+      bagsSold: Number(saleForm.bagsSold)
+    })
 
     if (res.success) {
       setIsSaleModalOpen(false)

@@ -4,19 +4,40 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  password   String
+  name       String
+  createdAt  DateTime    @default(now())
+  
+  cities     City[]
+  agents     Agent[]
+  shipments  Shipment[]
+  sales      Sale[]
+  statements Statement[]
 }
 
 model City {
   id        String     @id @default(uuid())
-  name      String     @unique
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
   country   String
   agents    Agent[]
   shipments Shipment[]
+
+  @@unique([userId, name])
 }
 
 model Agent {
   id               String      @id @default(uuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   cityId           String
   city             City        @relation(fields: [cityId], references: [id], onDelete: Cascade)
   name             String
@@ -27,11 +48,15 @@ model Agent {
   commissionValue  Float       // Percentage rate (e.g. 10.0 for 10%), or absolute amount (e.g. 500)
   shipments        Shipment[]
   statements       Statement[]
+
+  @@unique([userId, name])
 }
 
 model Shipment {
   id              String      @id @default(uuid())
-  shipmentNo      String      @unique
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shipmentNo      String
   cityId          String
   city            City        @relation(fields: [cityId], references: [id])
   agentId         String
@@ -48,10 +73,14 @@ model Shipment {
   createdAt       DateTime    @default(now())
   sale            Sale?
   statements      Statement[]
+
+  @@unique([userId, shipmentNo])
 }
 
 model Sale {
   id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   shipmentId   String   @unique
   shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   sellingPrice Float    // Selling Price Per Bag
@@ -65,6 +94,8 @@ model Sale {
 
 model Statement {
   id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   agentId         String
   agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   shipmentId      String?

@@ -1,294 +1,39 @@
 "use server"
 
-import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import prisma from "@/lib/prisma"
+import { getSessionUserId } from "@/lib/auth"
 
-// TYPES & INTERFACES
-export interface ActionResponse<T = any> {
+export interface ActionResponse {
   success: boolean
-  data?: T
   error?: string
+  data?: any
 }
 
-// -------------------------------------------------------------
-// SEED MOCK DATA HELPER
-// -------------------------------------------------------------
-export async function seedMockData(): Promise<ActionResponse> {
-  try {
-    // Check if database has data already
-    const cityCount = await prisma.city.count()
-    if (cityCount > 0) {
-      return { success: true, error: "Database already has data." }
-    }
-
-    // 1. Create Cities
-    const mumbai = await prisma.city.create({
-      data: { name: "Mumbai", country: "India" }
-    })
-    const delhi = await prisma.city.create({
-      data: { name: "Delhi", country: "India" }
-    })
-    const ahmedabad = await prisma.city.create({
-      data: { name: "Ahmedabad", country: "India" }
-    })
-
-    // 2. Create Agents
-    const abc = await prisma.agent.create({
-      data: {
-        name: "ABC Traders",
-        cityId: mumbai.id,
-        phone: "9876543210",
-        email: "contact@abctraders.com",
-        address: "APMC Market, Vashi, Mumbai",
-        commissionType: "Percentage",
-        commissionValue: 10.0 // 10%
-      }
-    })
-
-    const rawat = await prisma.agent.create({
-      data: {
-        name: "Rawat & Sons",
-        cityId: delhi.id,
-        phone: "9988776655",
-        email: "rawat.delhi@gmail.com",
-        address: "Azadpur Mandi, Delhi",
-        commissionType: "Fixed",
-        commissionValue: 500.0 // ₹500 fixed
-      }
-    })
-
-    const patel = await prisma.agent.create({
-      data: {
-        name: "Patel Agro Corp",
-        cityId: ahmedabad.id,
-        phone: "9123456789",
-        email: "patel.agro@yahoo.com",
-        address: "Kalupur Market, Ahmedabad",
-        commissionType: "PerBag",
-        commissionValue: 15.0 // ₹15 per bag
-      }
-    })
-
-    // 3. Create Shipments, Sales & Statements
-    // Shipment 1: Sold by ABC Traders
-    const shp1 = await prisma.shipment.create({
-      data: {
-        shipmentNo: "SHP001",
-        cityId: mumbai.id,
-        agentId: abc.id,
-        product: "Red Onions",
-        purchasePrice: 1200, // per bag
-        labourPrice: 50, // per bag
-        bags: 300,
-        lorryCharges: 25000,
-        otherCharges: 5000,
-        totalInvestment: (1200 * 300) + (50 * 300) + 25000 + 5000, // 360000 + 15000 + 30000 = 405,000
-        breakEvenPrice: ((1200 * 300) + (50 * 300) + 25000 + 5000) / 300, // 1350
-        status: "Sold"
-      }
-    })
-
-    const saleAmount1 = 1600 * 300 // 480,000
-    const commission1 = saleAmount1 * 0.10 // 48,000
-    const netSale1 = saleAmount1 - commission1 // 432,000
-    const profit1 = netSale1 - shp1.totalInvestment // 432000 - 405000 = 27,000
-
-    await prisma.sale.create({
-      data: {
-        shipmentId: shp1.id,
-        sellingPrice: 1600,
-        bagsSold: 300,
-        saleAmount: saleAmount1,
-        commission: commission1,
-        netSale: netSale1,
-        profit: profit1,
-        soldAt: new Date(new Date().setDate(new Date().getDate() - 10))
-      }
-    })
-
-    // Create Statement Debit for ABC Traders
-    await prisma.statement.create({
-      data: {
-        agentId: abc.id,
-        shipmentId: shp1.id,
-        transactionType: "Shipment",
-        description: `Shipment SHP001 Sale (Net)`,
-        debit: netSale1,
-        credit: 0,
-        runningBalance: netSale1, // First transaction
-        transactionDate: new Date(new Date().setDate(new Date().getDate() - 10))
-      }
-    })
-
-    // Payment 1 for ABC Traders (Credit)
-    await prisma.statement.create({
-      data: {
-        agentId: abc.id,
-        transactionType: "Payment",
-        description: "Payment Received - Bank Transfer",
-        debit: 0,
-        credit: 300000,
-        runningBalance: netSale1 - 300000, // 132,000
-        transactionDate: new Date(new Date().setDate(new Date().getDate() - 8))
-      }
-    })
-
-    // Shipment 2: Sold by ABC Traders
-    const shp2 = await prisma.shipment.create({
-      data: {
-        shipmentNo: "SHP002",
-        cityId: mumbai.id,
-        agentId: abc.id,
-        product: "Premium Garlic",
-        purchasePrice: 2000,
-        labourPrice: 80,
-        bags: 200,
-        lorryCharges: 20000,
-        otherCharges: 4000,
-        totalInvestment: (2000 * 200) + (80 * 200) + 20000 + 4000, // 400000 + 16000 + 24000 = 440,000
-        breakEvenPrice: 440000 / 200, // 2200
-        status: "Sold"
-      }
-    })
-
-    const saleAmount2 = 2500 * 200 // 500,000
-    const commission2 = saleAmount2 * 0.10 // 50,000
-    const netSale2 = saleAmount2 - commission2 // 450,000
-    const profit2 = netSale2 - shp2.totalInvestment // 450000 - 440000 = 10,000
-
-    await prisma.sale.create({
-      data: {
-        shipmentId: shp2.id,
-        sellingPrice: 2500,
-        bagsSold: 200,
-        saleAmount: saleAmount2,
-        commission: commission2,
-        netSale: netSale2,
-        profit: profit2,
-        soldAt: new Date(new Date().setDate(new Date().getDate() - 5))
-      }
-    })
-
-    // Debit for ABC Traders
-    await prisma.statement.create({
-      data: {
-        agentId: abc.id,
-        shipmentId: shp2.id,
-        transactionType: "Shipment",
-        description: `Shipment SHP002 Sale (Net)`,
-        debit: netSale2,
-        credit: 0,
-        runningBalance: (netSale1 - 300000) + netSale2, // 132000 + 450000 = 582,000
-        transactionDate: new Date(new Date().setDate(new Date().getDate() - 5))
-      }
-    })
-
-    // Payment 2 for ABC Traders (Credit - excess payment making a negative balance / advance)
-    await prisma.statement.create({
-      data: {
-        agentId: abc.id,
-        transactionType: "Payment",
-        description: "Advance Received - Cash",
-        debit: 0,
-        credit: 682000,
-        runningBalance: (netSale1 - 300000 + netSale2) - 682000, // 582000 - 682000 = -100,000 (Advance)
-        transactionDate: new Date(new Date().setDate(new Date().getDate() - 2))
-      }
-    })
-
-    // Shipment 3: Waiting for sale for Rawat & Sons
-    await prisma.shipment.create({
-      data: {
-        shipmentNo: "SHP003",
-        cityId: delhi.id,
-        agentId: rawat.id,
-        product: "Potatoes",
-        purchasePrice: 800,
-        labourPrice: 30,
-        bags: 500,
-        lorryCharges: 40000,
-        otherCharges: 10000,
-        totalInvestment: (800 * 500) + (30 * 500) + 40000 + 10000, // 400000 + 15000 + 50000 = 465,000
-        breakEvenPrice: 465000 / 500, // 930
-        status: "Waiting for Sale",
-        createdAt: new Date(new Date().setDate(new Date().getDate() - 1))
-      }
-    })
-
-    // Shipment 4: Waiting for sale for Patel Agro Corp
-    await prisma.shipment.create({
-      data: {
-        shipmentNo: "SHP004",
-        cityId: ahmedabad.id,
-        agentId: patel.id,
-        product: "Green Chillies",
-        purchasePrice: 1500,
-        labourPrice: 60,
-        bags: 250,
-        lorryCharges: 18000,
-        otherCharges: 2000,
-        totalInvestment: (1500 * 250) + (60 * 250) + 18000 + 2000, // 375000 + 15000 + 20000 = 410,000
-        breakEvenPrice: 410000 / 250, // 1640
-        status: "Waiting for Sale",
-        createdAt: new Date()
-      }
-    })
-
-    revalidatePath("/")
-    return { success: true }
-  } catch (error: any) {
-    console.error("Seeding error:", error)
-    return { success: false, error: error.message }
+// Helper to get authenticated user ID or throw
+function requireUserId(): string {
+  const userId = getSessionUserId()
+  if (!userId) {
+    throw new Error("Unauthorized. Please sign in.")
   }
+  return userId
 }
 
-// -------------------------------------------------------------
+// ==========================================
 // CITIES ACTIONS
-// -------------------------------------------------------------
+// ==========================================
 export async function getCities(): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
     const cities = await prisma.city.findMany({
+      where: { userId },
       include: {
-        agents: {
-          include: {
-            shipments: {
-              include: {
-                sale: true
-              }
-            }
-          }
-        },
-        shipments: {
-          include: {
-            sale: true
-          }
-        }
-      }
+        agents: true,
+        shipments: true
+      },
+      orderBy: { name: "asc" }
     })
-
-    // Map to include agent count, shipment count, and total profit calculated
-    const data = cities.map(city => {
-      const agentsCount = city.agents.length
-      const shipmentsCount = city.shipments.length
-      
-      let totalProfit = 0
-      city.shipments.forEach(shipment => {
-        if (shipment.sale) {
-          totalProfit += shipment.sale.profit
-        }
-      })
-
-      return {
-        id: city.id,
-        name: city.name,
-        country: city.country,
-        agentsCount,
-        shipmentsCount,
-        totalProfit
-      }
-    })
-
-    return { success: true, data }
+    return { success: true, data: cities }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
@@ -296,23 +41,47 @@ export async function getCities(): Promise<ActionResponse> {
 
 export async function createCity(name: string, country: string): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
+    if (!name || !country) {
+      return { success: false, error: "City name and country are required" }
+    }
+
     const city = await prisma.city.create({
-      data: { name, country }
+      data: {
+        userId,
+        name: name.trim(),
+        country: country.trim()
+      }
     })
+
     revalidatePath("/cities")
+    revalidatePath("/")
     return { success: true, data: city }
   } catch (e: any) {
+    if (e.code === "P2002") {
+      return { success: false, error: "A city with this name already exists" }
+    }
     return { success: false, error: e.message }
   }
 }
 
 export async function updateCity(id: string, name: string, country: string): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
+    if (!name || !country) {
+      return { success: false, error: "City name and country are required" }
+    }
+
     const city = await prisma.city.update({
-      where: { id },
-      data: { name, country }
+      where: { id, userId },
+      data: {
+        name: name.trim(),
+        country: country.trim()
+      }
     })
+
     revalidatePath("/cities")
+    revalidatePath("/")
     return { success: true, data: city }
   } catch (e: any) {
     return { success: false, error: e.message }
@@ -321,138 +90,111 @@ export async function updateCity(id: string, name: string, country: string): Pro
 
 export async function deleteCity(id: string): Promise<ActionResponse> {
   try {
-    await prisma.city.delete({ where: { id } })
+    const userId = requireUserId()
+    await prisma.city.delete({
+      where: { id, userId }
+    })
+
     revalidatePath("/cities")
+    revalidatePath("/")
     return { success: true }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
 }
 
-// -------------------------------------------------------------
+// ==========================================
 // AGENTS ACTIONS
-// -------------------------------------------------------------
+// ==========================================
 export async function getAgents(cityId?: string): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
     const agents = await prisma.agent.findMany({
-      where: cityId ? { cityId } : undefined,
+      where: {
+        userId,
+        ...(cityId ? { cityId } : {})
+      },
       include: {
         city: true,
-        shipments: {
-          include: {
-            sale: true
-          }
-        },
-        statements: {
-          orderBy: { transactionDate: 'desc' },
-          take: 1
-        }
-      }
+        shipments: true,
+        statements: true
+      },
+      orderBy: { name: "asc" }
     })
-
-    const data = await Promise.all(agents.map(async (agent) => {
-      // Outstanding and Advance Balance are calculated from the latest statement running balance
-      const latestStatement = agent.statements[0]
-      const runningBalance = latestStatement ? latestStatement.runningBalance : 0
-
-      // If running balance is positive: Agent owes us (Outstanding)
-      // If running balance is negative: We owe agent (Advance Balance)
-      const outstanding = runningBalance > 0 ? runningBalance : 0
-      const advanceBalance = runningBalance < 0 ? Math.abs(runningBalance) : 0
-
-      // Calculate total profit from all sold shipments of this agent
-      let totalProfit = 0
-      let totalSales = 0
-      agent.shipments.forEach(shipment => {
-        if (shipment.sale) {
-          totalProfit += shipment.sale.profit
-          totalSales += shipment.sale.netSale
-        }
-      })
-
-      // Get total received (Credit entries in statement)
-      const paymentSums = await prisma.statement.aggregate({
-        where: { agentId: agent.id, transactionType: "Payment" },
-        _sum: { credit: true }
-      })
-      const totalReceived = paymentSums._sum.credit ?? 0
-
-      return {
-        id: agent.id,
-        name: agent.name,
-        cityId: agent.cityId,
-        cityName: agent.city.name,
-        phone: agent.phone,
-        email: agent.email,
-        address: agent.address,
-        commissionType: agent.commissionType,
-        commissionValue: agent.commissionValue,
-        outstanding,
-        advanceBalance,
-        totalProfit,
-        totalSales,
-        totalReceived
-      }
-    }))
-
-    return { success: true, data }
+    return { success: true, data: agents }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
 }
 
-export async function createAgent(
-  name: string,
-  cityId: string,
-  phone: string,
-  email: string,
-  address: string,
-  commissionType: string,
+export async function createAgent(data: {
+  cityId: string
+  name: string
+  phone?: string
+  email?: string
+  address?: string
+  commissionType: string
   commissionValue: number
-): Promise<ActionResponse> {
+}): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
+    if (!data.cityId || !data.name || !data.commissionType || data.commissionValue === undefined) {
+      return { success: false, error: "Missing required fields" }
+    }
+
     const agent = await prisma.agent.create({
       data: {
-        name,
-        cityId,
-        phone,
-        email,
-        address,
-        commissionType,
-        commissionValue
+        userId,
+        cityId: data.cityId,
+        name: data.name.trim(),
+        phone: data.phone?.trim() || null,
+        email: data.email?.trim() || null,
+        address: data.address?.trim() || null,
+        commissionType: data.commissionType,
+        commissionValue: Number(data.commissionValue)
       }
     })
+
     revalidatePath("/agents")
+    revalidatePath("/")
     return { success: true, data: agent }
   } catch (e: any) {
+    if (e.code === "P2002") {
+      return { success: false, error: "An agent with this name already exists" }
+    }
     return { success: false, error: e.message }
   }
 }
 
 export async function updateAgent(
   id: string,
-  name: string,
-  cityId: string,
-  phone: string,
-  email: string,
-  address: string,
-  commissionType: string,
-  commissionValue: number
+  data: {
+    cityId: string
+    name: string
+    phone?: string
+    email?: string
+    address?: string
+    commissionType: string
+    commissionValue: number
+  }
 ): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
     const agent = await prisma.agent.update({
-      where: { id },
+      where: { id, userId },
       data: {
-        name,
-        cityId,
-        phone,
-        email,
-        address,
-        commissionType,
-        commissionValue
+        cityId: data.cityId,
+        name: data.name.trim(),
+        phone: data.phone?.trim() || null,
+        email: data.email?.trim() || null,
+        address: data.address?.trim() || null,
+        commissionType: data.commissionType,
+        commissionValue: Number(data.commissionValue)
       }
     })
+
     revalidatePath("/agents")
+    revalidatePath("/")
     return { success: true, data: agent }
   } catch (e: any) {
     return { success: false, error: e.message }
@@ -461,20 +203,27 @@ export async function updateAgent(
 
 export async function deleteAgent(id: string): Promise<ActionResponse> {
   try {
-    await prisma.agent.delete({ where: { id } })
+    const userId = requireUserId()
+    await prisma.agent.delete({
+      where: { id, userId }
+    })
+
     revalidatePath("/agents")
+    revalidatePath("/")
     return { success: true }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
 }
 
-// -------------------------------------------------------------
+// ==========================================
 // SHIPMENTS ACTIONS
-// -------------------------------------------------------------
+// ==========================================
 export async function getShipments(): Promise<ActionResponse> {
   try {
+    const userId = requireUserId()
     const shipments = await prisma.shipment.findMany({
+      where: { userId },
       include: {
         city: true,
         agent: true,
@@ -482,7 +231,6 @@ export async function getShipments(): Promise<ActionResponse> {
       },
       orderBy: { createdAt: "desc" }
     })
-
     return { success: true, data: shipments }
   } catch (e: any) {
     return { success: false, error: e.message }
@@ -501,26 +249,39 @@ export async function createShipment(data: {
   otherCharges: number
 }): Promise<ActionResponse> {
   try {
-    // Automatically calculate totals
+    const userId = requireUserId()
+    if (
+      !data.shipmentNo ||
+      !data.cityId ||
+      !data.agentId ||
+      !data.product ||
+      data.purchasePrice === undefined ||
+      data.labourPrice === undefined ||
+      !data.bags
+    ) {
+      return { success: false, error: "Missing required fields" }
+    }
+
     const totalInvestment =
-      (data.purchasePrice * data.bags) +
-      (data.labourPrice * data.bags) +
-      data.lorryCharges +
-      data.otherCharges
+      data.purchasePrice * data.bags +
+      data.labourPrice * data.bags +
+      (data.lorryCharges || 0) +
+      (data.otherCharges || 0)
 
     const breakEvenPrice = totalInvestment / data.bags
 
     const shipment = await prisma.shipment.create({
       data: {
-        shipmentNo: data.shipmentNo,
+        userId,
+        shipmentNo: data.shipmentNo.toUpperCase().trim(),
         cityId: data.cityId,
         agentId: data.agentId,
-        product: data.product,
-        purchasePrice: data.purchasePrice,
-        labourPrice: data.labourPrice,
-        bags: data.bags,
-        lorryCharges: data.lorryCharges,
-        otherCharges: data.otherCharges,
+        product: data.product.trim(),
+        purchasePrice: Number(data.purchasePrice),
+        labourPrice: Number(data.labourPrice),
+        bags: Number(data.bags),
+        lorryCharges: Number(data.lorryCharges || 0),
+        otherCharges: Number(data.otherCharges || 0),
         totalInvestment,
         breakEvenPrice,
         status: "Waiting for Sale"
@@ -528,17 +289,26 @@ export async function createShipment(data: {
     })
 
     revalidatePath("/shipments")
+    revalidatePath("/agent-sales")
     revalidatePath("/")
     return { success: true, data: shipment }
   } catch (e: any) {
+    if (e.code === "P2002") {
+      return { success: false, error: "A shipment with this number already exists" }
+    }
     return { success: false, error: e.message }
   }
 }
 
 export async function deleteShipment(id: string): Promise<ActionResponse> {
   try {
-    await prisma.shipment.delete({ where: { id } })
+    const userId = requireUserId()
+    await prisma.shipment.delete({
+      where: { id, userId }
+    })
+
     revalidatePath("/shipments")
+    revalidatePath("/agent-sales")
     revalidatePath("/")
     return { success: true }
   } catch (e: any) {
@@ -546,18 +316,22 @@ export async function deleteShipment(id: string): Promise<ActionResponse> {
   }
 }
 
-// -------------------------------------------------------------
-// AGENT SALES ACTIONS
-// -------------------------------------------------------------
-export async function recordSale(
-  shipmentId: string,
-  sellingPrice: number,
+// ==========================================
+// SALES ACTIONS
+// ==========================================
+export async function recordSale(data: {
+  shipmentId: string
+  sellingPrice: number
   bagsSold: number
-): Promise<ActionResponse> {
+}): Promise<ActionResponse> {
   try {
-    // 1. Fetch Shipment & Agent
+    const userId = requireUserId()
+    if (!data.shipmentId || !data.sellingPrice || !data.bagsSold) {
+      return { success: false, error: "Missing required fields" }
+    }
+
     const shipment = await prisma.shipment.findUnique({
-      where: { id: shipmentId },
+      where: { id: data.shipmentId, userId },
       include: { agent: true }
     })
 
@@ -566,89 +340,153 @@ export async function recordSale(
     }
 
     if (shipment.status === "Sold") {
-      return { success: false, error: "Shipment already sold" }
+      return { success: false, error: "This shipment has already been sold" }
     }
 
-    // 2. Perform Calculations
-    const saleAmount = sellingPrice * bagsSold
-    const agent = shipment.agent
+    const saleAmount = data.sellingPrice * data.bagsSold
 
+    // Calculate commission
     let commission = 0
+    const agent = shipment.agent
     if (agent.commissionType === "Percentage") {
       commission = saleAmount * (agent.commissionValue / 100)
     } else if (agent.commissionType === "Fixed") {
       commission = agent.commissionValue
     } else if (agent.commissionType === "PerBag") {
-      commission = agent.commissionValue * bagsSold
+      commission = agent.commissionValue * data.bagsSold
     }
 
     const netSale = saleAmount - commission
     const profit = netSale - shipment.totalInvestment
 
-    // 3. Create Sale record
-    const sale = await prisma.sale.create({
-      data: {
-        shipmentId,
-        sellingPrice,
-        bagsSold,
-        saleAmount,
-        commission,
-        netSale,
-        profit
-      }
+    // Run within a transaction: Create Sale, Update Shipment Status, and Add Statement Debit
+    const result = await prisma.$transaction(async (tx) => {
+      const newSale = await tx.sale.create({
+        data: {
+          userId,
+          shipmentId: data.shipmentId,
+          sellingPrice: Number(data.sellingPrice),
+          bagsSold: Number(data.bagsSold),
+          saleAmount,
+          commission,
+          netSale,
+          profit
+        }
+      })
+
+      await tx.shipment.update({
+        where: { id: data.shipmentId, userId },
+        data: { status: "Sold" }
+      })
+
+      // Fetch running balance before logging this debit
+      const lastStatement = await tx.statement.findFirst({
+        where: { agentId: shipment.agentId, userId },
+        orderBy: { transactionDate: "desc" }
+      })
+      const previousBalance = lastStatement ? lastStatement.runningBalance : 0
+      const runningBalance = previousBalance + netSale // Debits increase the balance
+
+      await tx.statement.create({
+        data: {
+          userId,
+          agentId: shipment.agentId,
+          shipmentId: shipment.id,
+          transactionType: "Shipment",
+          description: `Sold ${shipment.product} - Inv #${shipment.shipmentNo}`,
+          debit: netSale,
+          credit: 0,
+          runningBalance
+        }
+      })
+
+      return newSale
     })
 
-    // 4. Update Shipment Status
-    await prisma.shipment.update({
-      where: { id: shipmentId },
-      data: { status: "Sold" }
-    })
-
-    // 5. Get Latest Running Balance for the Agent
-    const latestStatement = await prisma.statement.findFirst({
-      where: { agentId: agent.id },
-      orderBy: { transactionDate: 'desc' }
-    })
-
-    const previousBalance = latestStatement ? latestStatement.runningBalance : 0
-    const newRunningBalance = previousBalance + netSale // Net Sale is the Debit
-
-    // 6. Create Statement Debit Entry
-    await prisma.statement.create({
-      data: {
-        agentId: agent.id,
-        shipmentId: shipment.id,
-        transactionType: "Shipment",
-        description: `Shipment ${shipment.shipmentNo} Sale (Net)`,
-        debit: netSale,
-        credit: 0,
-        runningBalance: newRunningBalance
-      }
-    })
-
-    // 7. Revalidate
     revalidatePath("/shipments")
     revalidatePath("/agent-sales")
     revalidatePath("/statements")
+    revalidatePath("/reports")
     revalidatePath("/")
 
-    return { success: true, data: sale }
+    return { success: true, data: result }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
 }
 
-// -------------------------------------------------------------
-// STATEMENTS & PAYMENTS ACTIONS
-// -------------------------------------------------------------
-export async function getStatements(agentId: string): Promise<ActionResponse> {
+export async function deleteSale(id: string): Promise<ActionResponse> {
   try {
-    const statements = await prisma.statement.findMany({
-      where: { agentId },
-      orderBy: { transactionDate: 'asc' },
-      include: {
-        shipment: true
+    const userId = requireUserId()
+    const sale = await prisma.sale.findUnique({
+      where: { id, userId },
+      include: { shipment: true }
+    })
+
+    if (!sale) {
+      return { success: false, error: "Sale not found" }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Delete corresponding statement entries linked to this shipment
+      await tx.statement.deleteMany({
+        where: { shipmentId: sale.shipmentId, agentId: sale.shipment.agentId, userId }
+      })
+
+      // Delete the sale record
+      await tx.sale.delete({
+        where: { id, userId }
+      })
+
+      // Re-mark shipment as waiting
+      await tx.shipment.update({
+        where: { id: sale.shipmentId, userId },
+        data: { status: "Waiting for Sale" }
+      })
+
+      // Re-calculate running balances for this agent
+      const statements = await tx.statement.findMany({
+        where: { agentId: sale.shipment.agentId, userId },
+        orderBy: { transactionDate: "asc" }
+      })
+
+      let balance = 0
+      for (const statement of statements) {
+        if (statement.transactionType === "Shipment") {
+          balance += statement.debit
+        } else {
+          balance -= statement.credit
+        }
+        await tx.statement.update({
+          where: { id: statement.id, userId },
+          data: { runningBalance: balance }
+        })
       }
+    })
+
+    revalidatePath("/shipments")
+    revalidatePath("/agent-sales")
+    revalidatePath("/statements")
+    revalidatePath("/reports")
+    revalidatePath("/")
+
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+// ==========================================
+// STATEMENT & PAYMENT ACTIONS
+// ==========================================
+export async function getLedgerHistory(agentId: string): Promise<ActionResponse> {
+  try {
+    const userId = requireUserId()
+    if (!agentId) return { success: false, error: "Agent ID is required" }
+
+    const statements = await prisma.statement.findMany({
+      where: { agentId, userId },
+      orderBy: { transactionDate: "asc" }
     })
 
     return { success: true, data: statements }
@@ -659,123 +497,236 @@ export async function getStatements(agentId: string): Promise<ActionResponse> {
 
 export async function recordPayment(data: {
   agentId: string
-  amountReceived: number
-  date: string
+  amount: number
+  paymentDate: string
   paymentMode: string
-  referenceNumber?: string
+  referenceNo?: string
   remarks?: string
 }): Promise<ActionResponse> {
   try {
-    // 1. Get Latest Running Balance for the Agent
-    const latestStatement = await prisma.statement.findFirst({
-      where: { agentId: data.agentId },
-      orderBy: { transactionDate: 'desc' }
+    const userId = requireUserId()
+    if (!data.agentId || !data.amount || !data.paymentDate || !data.paymentMode) {
+      return { success: false, error: "Missing required fields" }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const lastStatement = await tx.statement.findFirst({
+        where: { agentId: data.agentId, userId },
+        orderBy: { transactionDate: "desc" }
+      })
+
+      const previousBalance = lastStatement ? lastStatement.runningBalance : 0
+      const creditAmount = Number(data.amount)
+      const runningBalance = previousBalance - creditAmount // Credits reduce the outstanding balance
+
+      const description = `Payment Received [${data.paymentMode}] ${
+        data.referenceNo ? `- Ref: ${data.referenceNo}` : ""
+      } ${data.remarks ? `(${data.remarks})` : ""}`
+
+      return await tx.statement.create({
+        data: {
+          userId,
+          agentId: data.agentId,
+          transactionType: "Payment",
+          description,
+          debit: 0,
+          credit: creditAmount,
+          runningBalance,
+          transactionDate: new Date(data.paymentDate)
+        }
+      })
     })
 
-    const previousBalance = latestStatement ? latestStatement.runningBalance : 0
-    const newRunningBalance = previousBalance - data.amountReceived // Payments (Credits) reduce outstanding balance
-
-    const description = `Payment Received via ${data.paymentMode} ${
-      data.referenceNumber ? `[Ref: ${data.referenceNumber}]` : ""
-    } ${data.remarks ? `(${data.remarks})` : ""}`
-
-    // 2. Create Statement Credit Entry
-    const statement = await prisma.statement.create({
-      data: {
-        agentId: data.agentId,
-        transactionType: "Payment",
-        description,
-        debit: 0,
-        credit: data.amountReceived,
-        runningBalance: newRunningBalance,
-        transactionDate: new Date(data.date)
-      }
-    })
-
-    // 3. Revalidate
     revalidatePath("/statements")
-    revalidatePath("/agents")
+    revalidatePath("/reports")
     revalidatePath("/")
 
-    return { success: true, data: statement }
+    return { success: true, data: result }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
 }
 
-// -------------------------------------------------------------
-// DASHBOARD & REPORTS METRICS
-// -------------------------------------------------------------
-export async function getDashboardData(): Promise<ActionResponse> {
+export async function deleteStatementTransaction(id: string): Promise<ActionResponse> {
   try {
-    // Seed data if empty
-    await seedMockData()
-
-    // 1. Summary Cards
-    const totalShipments = await prisma.shipment.count()
-    
-    const investmentAgg = await prisma.shipment.aggregate({
-      _sum: { totalInvestment: true }
+    const userId = requireUserId()
+    const statement = await prisma.statement.findUnique({
+      where: { id, userId }
     })
-    const totalInvestment = investmentAgg._sum.totalInvestment ?? 0
 
-    const salesAgg = await prisma.sale.aggregate({
-      _sum: { netSale: true, profit: true }
-    })
-    const totalSales = salesAgg._sum.netSale ?? 0
-    const totalProfit = salesAgg._sum.profit ?? 0
-
-    // Retrieve active agents to compute aggregate pending (outstanding) and advance balances
-    const agentsResult = await getAgents()
-    let pendingAmount = 0
-    let advanceAmount = 0
-
-    if (agentsResult.success && agentsResult.data) {
-      agentsResult.data.forEach((agent: any) => {
-        pendingAmount += agent.outstanding
-        advanceAmount += agent.advanceBalance
-      })
+    if (!statement) {
+      return { success: false, error: "Transaction record not found" }
     }
 
-    // 2. Recent Shipments
-    const recentShipments = await prisma.shipment.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
+    // Handled differently: if it is linked to a shipment sale, we require deleting the sale itself
+    if (statement.transactionType === "Shipment") {
+      return {
+        success: false,
+        error: "This record is tied to a Shipment Sale. Please delete the Sale from the 'Agent Sales' page instead."
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Delete payment transaction
+      await tx.statement.delete({
+        where: { id, userId }
+      })
+
+      // Re-calculate running balances for this agent
+      const statements = await tx.statement.findMany({
+        where: { agentId: statement.agentId, userId },
+        orderBy: { transactionDate: "asc" }
+      })
+
+      let balance = 0
+      for (const st of statements) {
+        if (st.transactionType === "Shipment") {
+          balance += st.debit
+        } else {
+          balance -= st.credit
+        }
+        await tx.statement.update({
+          where: { id: st.id, userId },
+          data: { runningBalance: balance }
+        })
+      }
+    })
+
+    revalidatePath("/statements")
+    revalidatePath("/reports")
+    revalidatePath("/")
+
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+// ==========================================
+// REPORTS ACTIONS
+// ==========================================
+export async function getReportsData(): Promise<ActionResponse> {
+  try {
+    const userId = requireUserId()
+    const shipments = await prisma.shipment.findMany({
+      where: { userId },
       include: {
         city: true,
         agent: true,
         sale: true
-      }
+      },
+      orderBy: { createdAt: "desc" }
     })
 
-    // 3. Profit Graph Data (grouped by date)
-    const sales = await prisma.sale.findMany({
-      orderBy: { soldAt: 'asc' },
+    const statements = await prisma.statement.findMany({
+      where: { userId },
+      include: { agent: true },
+      orderBy: { transactionDate: "desc" }
+    })
+
+    return {
+      success: true,
+      data: {
+        shipments,
+        statements
+      }
+    }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}
+
+// ==========================================
+// DASHBOARD ACTIONS
+// ==========================================
+export async function getDashboardData(): Promise<ActionResponse> {
+  try {
+    const userId = requireUserId()
+
+    // 1. Core aggregates
+    const totalShipments = await prisma.shipment.count({ where: { userId } })
+
+    const shipments = await prisma.shipment.findMany({
+      where: { userId },
+      include: { sale: true }
+    })
+
+    const totalInvestment = shipments.reduce((sum, s) => sum + s.totalInvestment, 0)
+    const totalSales = shipments.reduce((sum, s) => sum + (s.sale?.netSale || 0), 0)
+    const totalProfit = shipments.reduce((sum, s) => sum + (s.sale?.profit || 0), 0)
+
+    // Outstanding vs Advances
+    // We group balances per agent
+    const agents = await prisma.agent.findMany({
+      where: { userId },
       include: {
-        shipment: true
+        statements: {
+          orderBy: { transactionDate: "desc" },
+          take: 1
+        }
       }
     })
 
-    const graphDataMap: { [dateStr: string]: { date: string; profit: number; sales: number } } = {}
-    sales.forEach(sale => {
-      const dateStr = new Date(sale.soldAt).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short'
-      })
-      if (!graphDataMap[dateStr]) {
-        graphDataMap[dateStr] = { date: dateStr, profit: 0, sales: 0 }
+    let pendingAmount = 0
+    let advanceAmount = 0
+
+    agents.forEach((agent) => {
+      const balance = agent.statements[0]?.runningBalance || 0
+      if (balance > 0) {
+        pendingAmount += balance
+      } else if (balance < 0) {
+        advanceAmount += Math.abs(balance)
       }
-      graphDataMap[dateStr].profit += sale.profit
-      graphDataMap[dateStr].sales += sale.netSale
     })
-    const profitGraphData = Object.values(graphDataMap)
 
-    // 4. City-wise Performance
-    const citiesResult = await getCities()
-    const cityPerformance = citiesResult.success ? citiesResult.data : []
+    // Recent Shipments (limit 5)
+    const recentShipments = await prisma.shipment.findMany({
+      where: { userId },
+      include: { city: true, agent: true, sale: true },
+      orderBy: { createdAt: "desc" },
+      take: 5
+    })
 
-    // 5. Agent-wise Performance
-    const agentPerformance = agentsResult.success ? agentsResult.data : []
+    // Profit trends (grouping by date)
+    const sales = await prisma.sale.findMany({
+      where: { userId },
+      orderBy: { soldAt: "asc" }
+    })
+
+    const profitGraphData = sales.map((sale) => ({
+      date: new Date(sale.soldAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+      profit: sale.profit,
+      sales: sale.netSale
+    }))
+
+    // City performance (Group investments / profits)
+    const citiesList = await prisma.city.findMany({
+      where: { userId },
+      include: {
+        shipments: {
+          include: { sale: true }
+        }
+      }
+    })
+
+    const cityPerformance = citiesList.map((city) => {
+      const investment = city.shipments.reduce((sum, s) => sum + s.totalInvestment, 0)
+      const profit = city.shipments.reduce((sum, s) => sum + (s.sale?.profit || 0), 0)
+      return {
+        name: city.name,
+        investment,
+        profit
+      }
+    })
+
+    // Agent performance (Group outstanding vs advance)
+    const agentPerformance = agents.map((agent) => {
+      const balance = agent.statements[0]?.runningBalance || 0
+      return {
+        name: agent.name,
+        balance
+      }
+    })
 
     return {
       success: true,
@@ -799,13 +750,216 @@ export async function getDashboardData(): Promise<ActionResponse> {
   }
 }
 
-export async function resetDatabase(): Promise<ActionResponse> {
+// ==========================================
+// SEED MOCK DATA & MAINTENANCE
+// ==========================================
+export async function seedMockData(): Promise<ActionResponse> {
   try {
-    await prisma.statement.deleteMany()
-    await prisma.sale.deleteMany()
-    await prisma.shipment.deleteMany()
-    await prisma.agent.deleteMany()
-    await prisma.city.deleteMany()
+    const userId = requireUserId()
+
+    // Verify if there are existing cities or agents for this user
+    const cityCount = await prisma.city.count({ where: { userId } })
+    if (cityCount > 0) {
+      return { success: false, error: "Database already contains data for this user. Clear database first." }
+    }
+
+    // Step 1: Create Cities
+    const mumbai = await prisma.city.create({ data: { userId, name: "Mumbai", country: "India" } })
+    const delhi = await prisma.city.create({ data: { userId, name: "Delhi", country: "India" } })
+    const ahmedabad = await prisma.city.create({ data: { userId, name: "Ahmedabad", country: "India" } })
+
+    // Step 2: Create Agents
+    const rawat = await prisma.agent.create({
+      data: {
+        userId,
+        cityId: mumbai.id,
+        name: "Rawat & Sons Corp",
+        email: "rawat@mumbai.com",
+        phone: "+91 98765 43210",
+        address: "APMC Market-II, Vashi, Navi Mumbai",
+        commissionType: "Percentage",
+        commissionValue: 5.0 // 5%
+      }
+    })
+
+    const patel = await prisma.agent.create({
+      data: {
+        userId,
+        cityId: ahmedabad.id,
+        name: "Patel Agro Corp",
+        email: "contact@patelagro.com",
+        phone: "+91 76543 21098",
+        address: "Grain Market, Kalupur, Ahmedabad",
+        commissionType: "PerBag",
+        commissionValue: 20.0 // ₹20 Per Bag
+      }
+    })
+
+    const goyal = await prisma.agent.create({
+      data: {
+        userId,
+        cityId: delhi.id,
+        name: "Goyal Traders Ltd",
+        email: "goyal@delhi.com",
+        phone: "+91 87654 32109",
+        address: "Naya Bazar, Old Delhi",
+        commissionType: "Fixed",
+        commissionValue: 8000.0 // ₹8000 Flat Commission
+      }
+    })
+
+    // Step 3: Create Shipments & Sales inside transactions
+    // Shipment 1: Mumbai (Rawat) - Sold
+    const shp1 = await prisma.shipment.create({
+      data: {
+        userId,
+        shipmentNo: "SHP2026001",
+        cityId: mumbai.id,
+        agentId: rawat.id,
+        product: "Premium Basmati Rice",
+        purchasePrice: 1200,
+        labourPrice: 40,
+        bags: 500,
+        lorryCharges: 35000,
+        otherCharges: 5000,
+        totalInvestment: 1200 * 500 + 40 * 500 + 35000 + 5000, // 660,000
+        breakEvenPrice: 1320,
+        status: "Sold"
+      }
+    })
+
+    const saleAmount1 = 1500 * 500 // 750,000
+    const commission1 = saleAmount1 * 0.05 // 37,500
+    const netSale1 = saleAmount1 - commission1 // 712,500
+    const profit1 = netSale1 - shp1.totalInvestment // 52,500
+
+    await prisma.sale.create({
+      data: {
+        userId,
+        shipmentId: shp1.id,
+        sellingPrice: 1500,
+        bagsSold: 500,
+        saleAmount: saleAmount1,
+        commission: commission1,
+        netSale: netSale1,
+        profit: profit1,
+        soldAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    await prisma.statement.create({
+      data: {
+        userId,
+        agentId: rawat.id,
+        shipmentId: shp1.id,
+        transactionType: "Shipment",
+        description: `Sold Premium Basmati Rice - Inv #SHP2026001`,
+        debit: netSale1,
+        credit: 0,
+        runningBalance: netSale1,
+        transactionDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    // Shipment 2: Ahmedabad (Patel) - Sold
+    const shp2 = await prisma.shipment.create({
+      data: {
+        userId,
+        shipmentNo: "SHP2026002",
+        cityId: ahmedabad.id,
+        agentId: patel.id,
+        product: "Groundnut Kernels",
+        purchasePrice: 950,
+        labourPrice: 30,
+        bags: 800,
+        lorryCharges: 42000,
+        otherCharges: 8000,
+        totalInvestment: 950 * 800 + 30 * 800 + 42000 + 8000, // 834,000
+        breakEvenPrice: 1042.5,
+        status: "Sold"
+      }
+    })
+
+    const saleAmount2 = 1100 * 800 // 880,000
+    const commission2 = 20 * 800 // 16,000
+    const netSale2 = saleAmount2 - commission2 // 864,000
+    const profit2 = netSale2 - shp2.totalInvestment // 30,000
+
+    await prisma.sale.create({
+      data: {
+        userId,
+        shipmentId: shp2.id,
+        sellingPrice: 1100,
+        bagsSold: 800,
+        saleAmount: saleAmount2,
+        commission: commission2,
+        netSale: netSale2,
+        profit: profit2,
+        soldAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    await prisma.statement.create({
+      data: {
+        userId,
+        agentId: patel.id,
+        shipmentId: shp2.id,
+        transactionType: "Shipment",
+        description: `Sold Groundnut Kernels - Inv #SHP2026002`,
+        debit: netSale2,
+        credit: 0,
+        runningBalance: netSale2,
+        transactionDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    // Shipment 3: Delhi (Goyal) - Waiting
+    await prisma.shipment.create({
+      data: {
+        userId,
+        shipmentNo: "SHP2026003",
+        cityId: delhi.id,
+        agentId: goyal.id,
+        product: "Organic Soybean Bags",
+        purchasePrice: 1100,
+        labourPrice: 35,
+        bags: 600,
+        lorryCharges: 29000,
+        otherCharges: 4000,
+        totalInvestment: 1100 * 600 + 35 * 600 + 29000 + 4000, // 714,000
+        breakEvenPrice: 1190,
+        status: "Waiting for Sale"
+      }
+    })
+
+    // Step 4: Record manual credits to statement history (Payment Logs)
+    // Rawat pays ₹500,000
+    await prisma.statement.create({
+      data: {
+        userId,
+        agentId: rawat.id,
+        transactionType: "Payment",
+        description: "Payment Received [Bank Transfer] - Ref: UTR987349283",
+        debit: 0,
+        credit: 500000,
+        runningBalance: netSale1 - 500000, // 212,500
+        transactionDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+      }
+    })
+
+    // Patel pays ₹900,000 (creates an advance balance of -₹36,000!)
+    await prisma.statement.create({
+      data: {
+        userId,
+        agentId: patel.id,
+        transactionType: "Payment",
+        description: "Payment Received [Cheque] - Ref: CHQ554019",
+        debit: 0,
+        credit: 900000,
+        runningBalance: netSale2 - 900000, // -36,000
+        transactionDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
+      }
+    })
 
     revalidatePath("/")
     revalidatePath("/cities")
@@ -821,3 +975,27 @@ export async function resetDatabase(): Promise<ActionResponse> {
   }
 }
 
+export async function resetDatabase(): Promise<ActionResponse> {
+  try {
+    const userId = requireUserId()
+
+    // Delete only this user's records to preserve multi-tenant isolation!
+    await prisma.statement.deleteMany({ where: { userId } })
+    await prisma.sale.deleteMany({ where: { userId } })
+    await prisma.shipment.deleteMany({ where: { userId } })
+    await prisma.agent.deleteMany({ where: { userId } })
+    await prisma.city.deleteMany({ where: { userId } })
+
+    revalidatePath("/")
+    revalidatePath("/cities")
+    revalidatePath("/agents")
+    revalidatePath("/shipments")
+    revalidatePath("/agent-sales")
+    revalidatePath("/statements")
+    revalidatePath("/reports")
+
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+}

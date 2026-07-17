@@ -85,11 +85,11 @@ export default function AgentSalesView({ initialShipments }: AgentSalesViewProps
     e.preventDefault()
     if (!selectedShipment || saleForm.sellingPrice <= 0 || saleForm.bagsSold <= 0) return
 
-    const res = await recordSale(
-      selectedShipment.id,
-      Number(saleForm.sellingPrice),
-      Number(saleForm.bagsSold)
-    )
+    const res = await recordSale({
+      shipmentId: selectedShipment.id,
+      sellingPrice: Number(saleForm.sellingPrice),
+      bagsSold: Number(saleForm.bagsSold)
+    })
 
     if (res.success) {
       setIsSaleOpen(false)

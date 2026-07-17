@@ -65,15 +65,15 @@ export default function AgentsView({ initialAgents, cities, activeCityId }: Agen
     e.preventDefault()
     if (!form.name || !form.cityId || form.commissionValue < 0) return
 
-    const res = await createAgent(
-      form.name,
-      form.cityId,
-      form.phone,
-      form.email,
-      form.address,
-      form.commissionType,
-      Number(form.commissionValue)
-    )
+    const res = await createAgent({
+      name: form.name,
+      cityId: form.cityId,
+      phone: form.phone,
+      email: form.email,
+      address: form.address,
+      commissionType: form.commissionType,
+      commissionValue: Number(form.commissionValue)
+    })
 
     if (res.success) {
       setIsAddOpen(false)
@@ -89,16 +89,15 @@ export default function AgentsView({ initialAgents, cities, activeCityId }: Agen
     e.preventDefault()
     if (!selectedAgent || !form.name || !form.cityId || form.commissionValue < 0) return
 
-    const res = await updateAgent(
-      selectedAgent.id,
-      form.name,
-      form.cityId,
-      form.phone,
-      form.email,
-      form.address,
-      form.commissionType,
-      Number(form.commissionValue)
-    )
+    const res = await updateAgent(selectedAgent.id, {
+      name: form.name,
+      cityId: form.cityId,
+      phone: form.phone,
+      email: form.email,
+      address: form.address,
+      commissionType: form.commissionType,
+      commissionValue: Number(form.commissionValue)
+    })
 
     if (res.success) {
       setIsEditOpen(false)

@@ -82,10 +82,10 @@ export default function StatementsView({ agents, initialStatements, initialAgent
 
     const res = await recordPayment({
       agentId: selectedAgentId,
-      amountReceived: Number(paymentForm.amountReceived),
-      date: paymentForm.date,
+      amount: Number(paymentForm.amountReceived),
+      paymentDate: paymentForm.date,
       paymentMode: paymentForm.paymentMode,
-      referenceNumber: paymentForm.referenceNumber,
+      referenceNo: paymentForm.referenceNumber,
       remarks: paymentForm.remarks
     })
 
