@@ -1,0 +1,10 @@
+name = "export-manager-erp"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = ".next"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "export-manager-db"
+database_id = "your-d1-database-id-goes-here"
