@@ -360,7 +360,7 @@ export default function ShipmentsView({ initialShipments, cities, agents }: Ship
                             <TrendingUp className="h-3.5 w-3.5 mr-1" /> Sell
                           </Button>
                         ) : (
-                          {shp.sale && (
+                          shp.sale && (
                             shp.sale.profit >= 0 ? (
                               <div className="text-xs text-emerald-600 dark:text-emerald-500 font-semibold px-2 py-1 select-none">
                                 Profit: {formatCurrency(shp.sale.profit)}
@@ -370,7 +370,7 @@ export default function ShipmentsView({ initialShipments, cities, agents }: Ship
                                 Loss: {formatCurrency(Math.abs(shp.sale.profit))}
                               </div>
                             )
-                          )}
+                          )
                         )}
                         <Button
                           variant="ghost"
