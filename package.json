@@ -9,7 +9,7 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "predeploy": "next build",
-    "deploy": "wrangler pages deploy .next --project-name export-manager-erp"
+    "deploy": "wrangler pages deploy .next --project-name export-manager-erp --branch main"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
