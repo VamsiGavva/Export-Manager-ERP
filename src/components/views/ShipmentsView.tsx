@@ -316,7 +316,14 @@ export default function ShipmentsView({ initialShipments, cities, agents }: Ship
                     <TableCell className="font-bold">{shp.shipmentNo}</TableCell>
                     <TableCell>{shp.product}</TableCell>
                     <TableCell>{shp.city.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{shp.agent.name}</TableCell>
+                    <TableCell>
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">{shp.agent.name}</div>
+                      {shp.sale && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">
+                          Sold @ {formatCurrency(shp.sale.sellingPrice)}/bag (Net: {formatCurrency(shp.sale.netSale)})
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>{shp.bags}</TableCell>
                     <TableCell>{formatCurrency(shp.totalInvestment)}</TableCell>
                     <TableCell>{formatCurrency(shp.breakEvenPrice)}</TableCell>
@@ -353,9 +360,17 @@ export default function ShipmentsView({ initialShipments, cities, agents }: Ship
                             <TrendingUp className="h-3.5 w-3.5 mr-1" /> Sell
                           </Button>
                         ) : (
-                          <div className="text-xs text-emerald-600 dark:text-emerald-500 font-semibold px-2 py-1 select-none">
-                            Profit: {shp.sale ? formatCurrency(shp.sale.profit) : ""}
-                          </div>
+                          {shp.sale && (
+                            shp.sale.profit >= 0 ? (
+                              <div className="text-xs text-emerald-600 dark:text-emerald-500 font-semibold px-2 py-1 select-none">
+                                Profit: {formatCurrency(shp.sale.profit)}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-rose-600 dark:text-rose-500 font-semibold px-2 py-1 select-none">
+                                Loss: {formatCurrency(Math.abs(shp.sale.profit))}
+                              </div>
+                            )
+                          )}
                         )}
                         <Button
                           variant="ghost"

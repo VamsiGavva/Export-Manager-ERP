@@ -116,12 +116,65 @@ export async function getAgents(cityId?: string): Promise<ActionResponse> {
       },
       include: {
         city: true,
-        shipments: true,
+        shipments: {
+          include: {
+            sale: true
+          }
+        },
         statements: true
       },
       orderBy: { name: "asc" }
     })
-    return { success: true, data: agents }
+
+    const mappedAgents = agents.map((agent) => {
+      // Sort statements by transactionDate desc, then id desc to get the absolute latest
+      const sortedStatements = [...agent.statements].sort((a, b) => {
+        const timeDiff = new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime()
+        if (timeDiff !== 0) return timeDiff
+        return b.id.localeCompare(a.id)
+      })
+
+      const latestStatement = sortedStatements[0]
+      const balance = latestStatement ? latestStatement.runningBalance : 0
+
+      const outstanding = balance > 0 ? balance : 0
+      const advanceBalance = balance < 0 ? Math.abs(balance) : 0
+
+      // Calculate total profit from sold shipments
+      let totalProfit = 0
+      agent.shipments.forEach((s) => {
+        if (s.sale) {
+          totalProfit += s.sale.profit
+        }
+      })
+
+      // Calculate totalSales (debits) and totalReceived (credits)
+      let totalSales = 0
+      let totalReceived = 0
+      agent.statements.forEach((st) => {
+        totalSales += st.debit || 0
+        totalReceived += st.credit || 0
+      })
+
+      return {
+        id: agent.id,
+        name: agent.name,
+        cityId: agent.cityId,
+        cityName: agent.city.name,
+        phone: agent.phone,
+        email: agent.email,
+        address: agent.address,
+        commissionType: agent.commissionType,
+        commissionValue: agent.commissionValue,
+        outstanding,
+        advanceBalance,
+        totalProfit,
+        totalSales,
+        totalReceived
+      }
+    })
+
+    return { success: true, data: mappedAgents }
   } catch (e: any) {
     return { success: false, error: e.message }
   }
