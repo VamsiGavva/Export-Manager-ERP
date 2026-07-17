@@ -1,0 +1,78 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model City {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  country   String
+  agents    Agent[]
+  shipments Shipment[]
+}
+
+model Agent {
+  id               String      @id @default(uuid())
+  cityId           String
+  city             City        @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  name             String
+  phone            String?
+  email            String?
+  address          String?
+  commissionType   String      // "Percentage", "Fixed", "PerBag"
+  commissionValue  Float       // Percentage rate (e.g. 10.0 for 10%), or absolute amount (e.g. 500)
+  shipments        Shipment[]
+  statements       Statement[]
+}
+
+model Shipment {
+  id              String      @id @default(uuid())
+  shipmentNo      String      @unique
+  cityId          String
+  city            City        @relation(fields: [cityId], references: [id])
+  agentId         String
+  agent           Agent       @relation(fields: [agentId], references: [id])
+  product         String
+  purchasePrice   Float       // Purchase Price Per Bag
+  labourPrice     Float       // Labour Charges Per Bag
+  bags            Int         // Total Bags
+  lorryCharges    Float
+  otherCharges    Float
+  totalInvestment Float       // Calculated: (purchasePrice * bags) + (labourPrice * bags) + lorryCharges + otherCharges
+  breakEvenPrice  Float       // Calculated: totalInvestment / bags
+  status          String      // "Waiting for Sale", "Sold"
+  createdAt       DateTime    @default(now())
+  sale            Sale?
+  statements      Statement[]
+}
+
+model Sale {
+  id           String   @id @default(uuid())
+  shipmentId   String   @unique
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  sellingPrice Float    // Selling Price Per Bag
+  bagsSold     Int      // Bags Sold
+  saleAmount   Float    // Calculated: sellingPrice * bagsSold
+  commission   Float    // Calculated based on Agent commission type & value
+  netSale      Float    // Calculated: saleAmount - commission
+  profit       Float    // Calculated: netSale - totalInvestment
+  soldAt       DateTime @default(now())
+}
+
+model Statement {
+  id              String   @id @default(uuid())
+  agentId         String
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  shipmentId      String?
+  shipment        Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  transactionType String   // "Shipment" (Debit), "Payment" (Credit), "Adjustment"
+  description     String
+  debit           Float    @default(0)
+  credit          Float    @default(0)
+  runningBalance  Float
+  transactionDate DateTime @default(now())
+}
